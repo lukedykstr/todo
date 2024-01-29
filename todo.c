@@ -111,13 +111,53 @@ void todo_add(char* msg, char* note, char* due) {
 	printf("task created\n");
 }
 
+/*
+ * List all tasks stored in todo.txt.
+ *
+ * Returns nothing.
+ */
+void list_tasks() {
+	FILE* file = fopen("todo.txt", "r+");
+
+	if (file == NULL) {
+		printf("todo: failure to create or open todo file\n");
+		exit(1);
+	}
+	// Index of the task to print (not line number, but task #)
+	int index = 1;
+	// Buffer string to store next line of file
+	char* buffer = NULL;
+	size_t size = 0;
+	// Length of the next line
+	int length;
+
+	// Get the next line of the file
+	length = getline(&buffer, &size, file);
+	// Repeat while next line exists (EOF not reached)
+	while (length != -1) {
+		// Print task# and task message stored in buffer
+		printf("%d: %s", index, buffer);
+		// Skip task date, note, due date, end, and move to next task
+		// In total, skip 5 lines
+		for (int i = 0; i < 5; i ++) {
+			length = getline(&buffer, &size, file);
+		}
+		// Increase the task#
+		index ++;
+	}
+
+	fclose(file);
+}
+
 int main(int argc, char* argv[]) {
 	// Get command info given argc and argv
 	cmdinfo* cmd = get_cmd_info(argc, argv);
 
 	if (cmd != NULL) {
 		if (!strcmp(cmd -> cmd, "all")) {
-
+			// todo all
+			// List all tasks
+			list_tasks();
 		} else {
 			// If first argument provided does not match with a valid command,
 			// create task with arg1 (cmd -> cmd) as the name
