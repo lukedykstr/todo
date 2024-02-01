@@ -13,6 +13,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <time.h>
+#include <ctype.h>
 #include "vector.h"
 
 // Struct that holds information about the command and arguments
@@ -36,7 +37,9 @@ int task_index = 0;
 
 /* 
  * Given argc and argv from main, create a struct that holds
- * parsed information about the arguments from the command line
+ * parsed information about the arguments from the command line.
+ *
+ * /!\ The data is not copied, they are the same pointers provided in argv /!\
  *
  * Returns pointer to a cmdinfo struct that holds the information,
  * or NULL if no command was provided
@@ -110,7 +113,7 @@ cmdinfo* get_cmd_info(int argc, char* argv[]) {
 						exit(1);
 					}
 
-					cmd -> opt_cr = argv[++ i];
+					cmd -> opt_cr = argv[++ i];	
 				}
 			}
 		}
@@ -132,6 +135,43 @@ tm* get_curr_time() {
 }
 
 /*
+ * Given a non-specific date string (ex. "Tomorrow", "Tuesday", etc...), return a
+ * specific, normalized system date.
+ *
+ * /!\ Will modify the input string by making it lowercase.
+ *
+ * Input date is valid, returns a string, otherwise, returns NULL.
+ */
+char* norm_date(char* datein) {
+	// Make datein all lowercase so we can compare it
+	for(int i = 0; i < strlen(datein); i ++) {
+		datein[i] = tolower(datein[i]);
+	}
+	
+	// Time struct to hold our desired output datetime
+	tm dateout;
+
+	// Parse using space
+	char* token = strtok(datein, " ");
+	tm* curr_time = get_curr_time();
+	
+	while (token) {
+		if (!strcmp(token, "today")) {
+			// Set desired date day, month, year to current day, month, year
+			dateout.tm_mday  = curr_time -> tm_mday;
+			dateout.tm_mon   = curr_time -> tm_mon;
+			dateout.tm_year  = curr_time -> tm_year;
+		} else if (!strcmp(token, "tomorrow") || !strcmp(token, "tm")) {
+			// Set desired date to tomorrow
+			
+		} else {
+			char* days[] = {"sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"};
+			char* shortdays[] = {"sun", "mon", "tue", "wed", "thu", "fri", "sat"};
+		}
+	}
+}
+
+/*
  * Creates a task given the message / task name, note, and due date.
  * Set note, due date, or category to NULL if none provided.
  *
@@ -142,8 +182,22 @@ void todo_add(char* msg, char* note, char* due, char* cat) {
 
 	if (file == NULL) {
 		printf("todo: failure to create or open .todo file\n");
+		fclose(file);
 		exit(1);
 	}
+
+	if (msg[0] == '-') {
+		printf("todo: task name cannot start with '-'\n");
+		fclose(file);
+		exit(1);
+	}
+
+	if (atoi(msg) != 0) {
+		printf("todo: task name cannot be a number\n");
+		fclose(file);
+		exit(1);
+	}
+
 	// Get the current time as a string
 	time_t curr_time = time(NULL);
 	char* timestr = ctime(&curr_time);
@@ -179,6 +233,92 @@ void todo_add(char* msg, char* note, char* due, char* cat) {
 	fclose(file);
 
 	printf("task created\n");
+}
+
+/*
+ * Deletes a task given either its index or name as a string.
+ * Checks if input string can be converted to a valid integer, if so,
+ * it will delete the task at that index. Otherwise, it will delete 
+ * the task with that name.
+ *
+ * Returns nothing.
+ */
+void task_delete(char* instr) {
+	FILE* file = fopen(".todo", "r+");
+
+	if (file == NULL) {
+		printf("todo: failure to create or open .todo file\n");
+		exit(1);
+	}
+
+	FILE* temp = fopen(".tdtemp", "w+");
+
+	if (temp == NULL) {
+		printf("todo: failure to create or open temp file\n");
+		exit(1);
+	}
+
+	// If instr represents a valid integer, trgt_index will be a value
+	// other than 0
+	int trgt_index = atoi(instr);
+
+	printf("str in: %s\n", instr);
+	printf("tgt index: %d\n", trgt_index);
+
+	char* line = NULL;
+	size_t size = 0;
+	int length;
+	int curr_index = 1;
+	
+	length = getline(&line, &size, file);
+
+	while (length != -1) {
+		// Remove newline at the end of line so we can compare it
+		line[strlen(line) - 1] = '\0';
+		// If trgt_index is not 0 and current index is not target index, keep this task
+		// OR if trgt_index is 0 and current task name is not target task name (instr), keep this task
+		// Keep the task by appending it to the temp file, delete it by skipping it
+		printf("current index: %d\n", curr_index);
+
+		if ((trgt_index != 0 && curr_index != trgt_index) ||
+				(trgt_index == 0 && strcmp(line, instr))) {
+
+			printf("keeping this task...\n");
+
+			for(int i = 0; i < 5; i ++) {
+				fputs(line, temp);
+				printf("%s", line);
+
+				if (i == 0) {
+					// Add back the newline to the first line
+					fputs("\n", temp);
+					printf("\n");
+				}
+
+				length = getline(&line, &size, file);
+			}
+		} else {
+			// Skip this task
+			printf("skipping this task...\n");
+
+			for(int i = 0; i < 5; i ++) {
+				printf("%s|", line);
+				length = getline(&line, &size, file);
+			}
+		}
+		
+		// Increment current task index
+		curr_index ++;
+	}
+	
+	fclose(file);
+	fclose(temp);
+	
+	// Delete old todo file, make temp the new todo file
+	remove(".todo");
+	rename(".tdtemp", ".todo");
+
+	printf("task deleted\n");
 }
 
 /*
@@ -298,6 +438,10 @@ int main(int argc, char* argv[]) {
 			// todo ls (-i -c -due -cr)
 			// List all tasks
 			list_tasks(cmd -> opt_i, cmd -> opt_c, cmd -> opt_cr, cmd -> opt_due);
+		} else if (!strcmp(cmd -> cmd, "del")) {
+			// todo del [index or name]
+			// Delete task
+			task_delete(cmd -> arg);
 		} else {
 			// If first argument provided does not match with a valid command,
 			// create task with arg1 (cmd -> cmd) as the name
