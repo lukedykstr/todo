@@ -14,6 +14,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <ctype.h>
+#include "parse.h"
 
 // Struct that holds information about the command and arguments
 // provided when the program is run from the command line
@@ -96,6 +97,7 @@ cmdinfo* get_cmd_info(int argc, char* argv[]) {
 
 					cmd -> opt_due_day = argv[++ i];
 				} else if (!strcmp(argv[i], "-i")) {
+					// -i
 					cmd -> opt_i = 1;
 				} else if (!strcmp(argv[i], "-c")) {
 					// -c [category]
@@ -116,6 +118,7 @@ cmdinfo* get_cmd_info(int argc, char* argv[]) {
 
 					cmd -> opt_cr = argv[++ i];	
 				} else if (!strcmp(argv[i], "-com")) {
+					// -com
 					cmd -> opt_com = 1;
 				}
 			}
@@ -141,37 +144,19 @@ tm* get_curr_time() {
  * Given a non-specific date string (ex. "Tomorrow", "Tuesday", etc...), return a
  * specific, normalized system date.
  *
- * /!\ Will modify the input string by making it lowercase.
- *
- * Input date is valid, returns a string, otherwise, returns NULL.
+ * If input date is valid, returns a string; otherwise returns NULL.
  */
 char* norm_date(char* datein) {
-	// Make datein all lowercase so we can compare it
-	for(int i = 0; i < strlen(datein); i ++) {
-		datein[i] = tolower(datein[i]);
-	}
-	
-	// Time struct to hold our desired output datetime
-	tm dateout;
+	int tlength = strlen(datein) * 2 + 2;
+	parray tokens;
+	parse(&tokens, datein);
 
-	// Parse using space
-	char* token = strtok(datein, " ");
-	tm* curr_time = get_curr_time();
-	
-	while (token) {
-		if (!strcmp(token, "today")) {
-			// Set desired date day, month, year to current day, month, year
-			dateout.tm_mday  = curr_time -> tm_mday;
-			dateout.tm_mon   = curr_time -> tm_mon;
-			dateout.tm_year  = curr_time -> tm_year;
-		} else if (!strcmp(token, "tomorrow") || !strcmp(token, "tm")) {
-			// Set desired date to tomorrow
-			
-		} else {
-			char* days[] = {"sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"};
-			char* shortdays[] = {"sun", "mon", "tue", "wed", "thu", "fri", "sat"};
-		}
+	for (int i = 0; i < tlength; i ++) {
+		if (!strcmp(tokens[i], "END")) { break; }
+		printf("%d: %s\n", i, tokens[i]);
 	}
+
+	return "";
 }
 
 /*
@@ -471,6 +456,8 @@ int main(int argc, char* argv[]) {
 			// todo com [index or name]
 			// Complete task
 			task_complete(cmd -> arg);
+		} else if (!strcmp(cmd -> cmd, "test")) {
+			norm_date(cmd -> arg);
 		} else {
 			// If first argument provided does not match with a valid command,
 			// create task with arg1 (cmd -> cmd) as the name
