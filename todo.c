@@ -14,7 +14,6 @@
 #include <stdlib.h>
 #include <time.h>
 #include <ctype.h>
-#include "vector.h"
 
 // Struct that holds information about the command and arguments
 // provided when the program is run from the command line
@@ -27,6 +26,7 @@ typedef struct cmdinfo {
 	int opt_i;        // -i
 	char* opt_c;     // -c [category]
 	char* opt_cr;   // -cr [creation date]
+	int opt_com;   // -com
 } cmdinfo;
 
 // Typedef struct tm from time.h library to just tm
@@ -48,13 +48,14 @@ cmdinfo* get_cmd_info(int argc, char* argv[]) {
 	if (argc > 1) {
 		// Create new cmdinfo struct to store info
 		cmdinfo* cmd = malloc(sizeof(cmdinfo));
-		// Default all options to NULL
+		// Default all options to NULL or 0
 		cmd -> arg = NULL;
 		cmd -> opt_n = NULL;
 		cmd -> opt_due = NULL;
 		cmd -> opt_due_day = NULL;
 		cmd -> opt_i = 0;
 		cmd -> opt_c = NULL;
+		cmd -> opt_com = 0;
 		// Get the command name
 		cmd -> cmd = argv[1];
 		// Get any options provided
@@ -114,6 +115,8 @@ cmdinfo* get_cmd_info(int argc, char* argv[]) {
 					}
 
 					cmd -> opt_cr = argv[++ i];	
+				} else if (!strcmp(argv[i], "-com")) {
+					cmd -> opt_com = 1;
 				}
 			}
 		}
@@ -241,9 +244,9 @@ void todo_add(char* msg, char* note, char* due, char* cat) {
  * it will delete the task at that index. Otherwise, it will delete 
  * the task with that name.
  *
- * Returns nothing.
+ * Returns the deleted task as a string.
  */
-void task_delete(char* instr) {
+char* task_delete(char* instr) {
 	FILE* file = fopen(".todo", "r+");
 
 	if (file == NULL) {
@@ -261,9 +264,8 @@ void task_delete(char* instr) {
 	// If instr represents a valid integer, trgt_index will be a value
 	// other than 0
 	int trgt_index = atoi(instr);
-
-	printf("str in: %s\n", instr);
-	printf("tgt index: %d\n", trgt_index);
+	// String to store deleted task info
+	char* deltsk = malloc(1);
 
 	char* line = NULL;
 	size_t size = 0;
@@ -275,34 +277,24 @@ void task_delete(char* instr) {
 	while (length != -1) {
 		// Remove newline at the end of line so we can compare it
 		line[strlen(line) - 1] = '\0';
+
 		// If trgt_index is not 0 and current index is not target index, keep this task
 		// OR if trgt_index is 0 and current task name is not target task name (instr), keep this task
 		// Keep the task by appending it to the temp file, delete it by skipping it
-		printf("current index: %d\n", curr_index);
-
 		if ((trgt_index != 0 && curr_index != trgt_index) ||
 				(trgt_index == 0 && strcmp(line, instr))) {
-
-			printf("keeping this task...\n");
+			line[strlen(line)] = '\n';
 
 			for(int i = 0; i < 5; i ++) {
 				fputs(line, temp);
-				printf("%s", line);
-
-				if (i == 0) {
-					// Add back the newline to the first line
-					fputs("\n", temp);
-					printf("\n");
-				}
-
 				length = getline(&line, &size, file);
 			}
 		} else {
-			// Skip this task
-			printf("skipping this task...\n");
-
+			line[strlen(line)] = '\n';
+			// Skip this task, store to deleted task info string
 			for(int i = 0; i < 5; i ++) {
-				printf("%s|", line);
+				deltsk = realloc(deltsk, strlen(deltsk) + strlen(line));
+				strcat(deltsk, line);
 				length = getline(&line, &size, file);
 			}
 		}
@@ -319,6 +311,8 @@ void task_delete(char* instr) {
 	rename(".tdtemp", ".todo");
 
 	printf("task deleted\n");
+
+	return deltsk;
 }
 
 /*
@@ -326,14 +320,15 @@ void task_delete(char* instr) {
  * Set these arguments to NULL to ignore and list all.
  *
  * If info is 1, print extra information.
+ * If com is 1, print completed tasks.
  *
  * Returns nothing.
  */
-void list_tasks(int info, char* cat, char* crdate, char* duedate) {
-	FILE* file = fopen(".todo", "r+");
+void list_tasks(int info, char* cat, char* crdate, char* duedate, int com) {
+	FILE* file = fopen(com? ".todo-com" : ".todo", "r+");
 
 	if (file == NULL) {
-		printf("todo: failure to create or open .todo file\n");
+		printf("todo: failure to create or open %s file\n", com? ".todo-com" : ".todo");
 		exit(1);
 	}
 
@@ -429,19 +424,53 @@ void list_tasks(int info, char* cat, char* crdate, char* duedate) {
 	fclose(file);
 }
 
+/*
+ * Completes a task given either its name or index as a string.
+ * Removes it from the main file and adds it to .todo-com.
+ *
+ * Returns nothing.
+ */
+void task_complete(char* instr) {
+	FILE* comfile = fopen(".todo-com", "a+");
+
+	if (comfile == NULL) {
+		printf("todo: failure to create or open file .todo-com\n");
+		exit(1);
+	}
+
+	char* deltsk = task_delete(instr);
+	fputs(deltsk, comfile);
+
+	char* msgs[] = {"congrats!", "well done!", "good job!", "great work!", "I knew you could do it!", "brilliant!",
+		"keep it up!", "grind don't stop.", "you are a beast.", "that's how it's done >:D", "nice :D", "way to go!", "proud of you."};
+	// Number of messages
+	int msgnum = 13;
+
+	srand(time(NULL));
+
+	char* name = strtok(deltsk, "\n");
+	printf("completed - %s | %s\n", name, msgs[rand() % msgnum]);
+
+	free(deltsk);
+}
+
 int main(int argc, char* argv[]) {
 	// Get command info given argc and argv
 	cmdinfo* cmd = get_cmd_info(argc, argv);
 
 	if (cmd != NULL) {
 		if (!strcmp(cmd -> cmd, "ls")) {
-			// todo ls (-i -c -due -cr)
+			// todo ls (-i -c -due -cr -com)
 			// List all tasks
-			list_tasks(cmd -> opt_i, cmd -> opt_c, cmd -> opt_cr, cmd -> opt_due);
+			list_tasks(cmd -> opt_i, cmd -> opt_c, cmd -> opt_cr, cmd -> opt_due, cmd -> opt_com);
 		} else if (!strcmp(cmd -> cmd, "del")) {
 			// todo del [index or name]
 			// Delete task
-			task_delete(cmd -> arg);
+			free(task_delete(cmd -> arg));
+		} else if (!strcmp(cmd -> cmd, "com")) {
+			// todo com [index or name]
+			// Complete task
+			task_complete(cmd -> arg);
 		} else {
 			// If first argument provided does not match with a valid command,
 			// create task with arg1 (cmd -> cmd) as the name
