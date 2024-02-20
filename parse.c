@@ -1,7 +1,14 @@
 #include <string.h>
 
+// Parse array data type (just an array of strings)
 typedef char parray[250][250];
 
+/*
+ * Parses the given string into the given parray with delimiters
+ * space, /, :, and -
+ *
+ * Returns nothing.
+ */
 void parse(parray* tokens, char* strin) {
 	// Current word being parsed
 	char word[strlen(strin) + 1];
@@ -40,4 +47,18 @@ void parse(parray* tokens, char* strin) {
 	
 	// Add "END" to end of tokens array
 	strcpy((*tokens)[curr_index], "END");
+}
+
+/*
+ * Given an array of strings, its length, and a target string,
+ * return the index of the target string in the array.
+ *
+ * If target string is not found, returns -1.
+ */
+int array_find(char* words[], int length, char* word) {
+	for(int i = 0; i < length; i ++) {
+		if (!strcmp(words[i], word)) { return i; }
+	}
+
+	return -1;
 }

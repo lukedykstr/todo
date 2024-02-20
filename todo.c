@@ -150,13 +150,63 @@ char* norm_date(char* datein) {
 	int tlength = strlen(datein) * 2 + 2;
 	parray tokens;
 	parse(&tokens, datein);
+	// List of month names, full and abbreviated
+	char* months[] = {"january", "february", "march", "april", "may", "june", "july", "august",
+		"september", "october", "november", "december", "jan", "feb", "mar", "apr", "jun", "jul", "aug",
+		"sep", "oct", "nov", "dec"};
+	// Month numbers that match up with the month names
+	int monnums[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 11};
+	// List of days, full and abbreviated
+	char* days[] = {"sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday",
+		"sun", "mon", "tue", "wed", "thurs", "fri", "sat"};
+	// Day numbers that match up with days
+	int daynums[] = {0, 1, 2, 3, 4, 5, 6, 0, 1, 2, 3, 4, 5, 6};
+	// Current time as tm struct
+	tm* currtime = get_curr_time();
+	// Struct to store our desired output date
+	tm dateout;
+	// Index for array_find(array, token)
+	int index = -1;
+	// If the word 'next' is found, will be set to 1
+	int next_flag = 0;
 
 	for (int i = 0; i < tlength; i ++) {
 		if (!strcmp(tokens[i], "END")) { break; }
-		printf("%d: %s\n", i, tokens[i]);
+
+		if (!strcmp(tokens[i], "next")) {
+			next_flag = 1;
+			continue;
+		}
+
+		index = array_find(months, 24, tokens[i]);
+
+		if (index != -1) {
+			if (strcmp(tokens[++i], "END")) {
+				// Set output month# to specified month
+				dateout.tm_mon = index % 12;
+
+				if (index % 12 < currtime -> tm_mon) {
+					// If specified month# number is less than current month,
+					// assume it means that month next year.
+					// Set year accordingly
+					dateout.tm_year ++;
+				}
+
+				continue;
+			} else {
+				printf("invalid date: no day provided after month '%s' [day#]\n", months[index]);
+				return NULL;
+			}
+		}
+		
+		index = array_find(days, 14, tokens[i]);
+
+		if (index != -1) {
+			
+		}
 	}
 
-	return "";
+	return NULL;
 }
 
 /*
@@ -230,6 +280,7 @@ void todo_add(char* msg, char* note, char* due, char* cat) {
  * the task with that name.
  *
  * Returns the deleted task as a string.
+ * If no task could be deleted, returns NULL.
  */
 char* task_delete(char* instr) {
 	FILE* file = fopen(".todo", "r+");
@@ -256,6 +307,8 @@ char* task_delete(char* instr) {
 	size_t size = 0;
 	int length;
 	int curr_index = 1;
+	// Will be 1 if a task is actually deleted
+	int task_deleted = 0;
 	
 	length = getline(&line, &size, file);
 
@@ -275,6 +328,7 @@ char* task_delete(char* instr) {
 				length = getline(&line, &size, file);
 			}
 		} else {
+			task_deleted = 1;
 			line[strlen(line)] = '\n';
 			// Skip this task, store to deleted task info string
 			for(int i = 0; i < 5; i ++) {
@@ -287,9 +341,19 @@ char* task_delete(char* instr) {
 		// Increment current task index
 		curr_index ++;
 	}
-	
+
 	fclose(file);
 	fclose(temp);
+
+	if (!task_deleted) {
+		if (trgt_index != 0) {
+			printf("todo: could not find task with index %d\n", trgt_index);
+		} else {
+			printf("todo: could not find task with name '%s'\n", instr);
+		}
+
+		return NULL;
+	}
 	
 	// Delete old todo file, make temp the new todo file
 	remove(".todo");
@@ -424,6 +488,13 @@ void task_complete(char* instr) {
 	}
 
 	char* deltsk = task_delete(instr);
+
+	if (deltsk == NULL) {
+		printf("task could not be completed\n");
+		fclose(comfile);
+		return;
+	}
+
 	fputs(deltsk, comfile);
 
 	char* msgs[] = {"congrats!", "well done!", "good job!", "great work!", "I knew you could do it!", "brilliant!",
